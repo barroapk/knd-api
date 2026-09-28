@@ -1,4 +1,5 @@
 export interface CreateManagerDto {
+  username?: string;
   email: string;
   password: string;
   displayName: string;

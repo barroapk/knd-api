@@ -10,6 +10,7 @@ export interface ManagerContext {
   id: string;
   role: 'ADMIN' | 'MANAGER';
   email: string;
+  username?: string | null;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -70,7 +71,7 @@ export class ManagerService {
       .from('deposits')
       .update({
         status: 'PROCESSING',
-        processed_by: manager.email,
+        processed_by: manager.username || manager.email,
         processed_by_manager_id: manager.id,
         processing_started_at: new Date().toISOString(),
       })

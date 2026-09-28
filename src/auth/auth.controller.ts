@@ -1,4 +1,6 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { AdminOnlyGuard } from './admin-only.guard';
 import { AuthService } from './auth.service';
 import type { RegisterManagerDto, LoginDto } from './auth.types';
 
@@ -7,6 +9,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @UseGuards(JwtAuthGuard, AdminOnlyGuard)
   async register(@Body() dto: RegisterManagerDto) {
     return this.authService.register(dto);
   }

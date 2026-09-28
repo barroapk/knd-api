@@ -36,7 +36,7 @@ export class JwtAuthGuard implements CanActivate {
     // le compte existe toujours et est actif a chaque requete.
     const { data: account } = await this.supabase.client
       .from('manager_accounts')
-      .select('id, role, enabled')
+      .select('id, role, enabled, username')
       .eq('id', payload.sub)
       .maybeSingle();
 
@@ -44,7 +44,7 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Compte invalide ou desactive');
     }
 
-    request.manager = { id: account.id, role: account.role, email: payload.email };
+    request.manager = { id: account.id, role: account.role, email: payload.email, username: account.username };
     return true;
   }
 }

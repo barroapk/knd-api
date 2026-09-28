@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -13,13 +14,30 @@ import {
   UpdateManagerRoleDto,
 } from './admin.types';
 
-const SAFE_COLUMNS = 'id, email, display_name, role, enabled, last_login_at, created_at, updated_at';
+const SAFE_COLUMNS = 'id, email, username, display_name, role, enabled, last_login_at, created_at, updated_at';
 
 @Injectable()
 export class AdminService {
   constructor(private readonly supabase: SupabaseService) {}
 
   async createManager(dto: CreateManagerDto) {
+    const rawUsername = (dto.username ?? String(dto.email ?? '').split('@')[0]).trim().toLowerCase();
+    const username = rawUsername.replace(/[^a-z0-9._-]/g, '');
+    if (!/^[a-z0-9._-]{3,30}$/.test(username)) {
+      throw new BadRequestException("Nom d'utilisateur invalide (3 a 30 caracteres : lettres, chiffres, point, tiret)");
+    }
+    if (!dto.password || dto.password.length < 8) {
+      throw new BadRequestException('Mot de passe trop court (8 caracteres minimum)');
+    }
+    const { data: usernameTaken } = await this.supabase.client
+      .from('manager_accounts')
+      .select('id')
+      .eq('username', username)
+      .maybeSingle();
+    if (usernameTaken) {
+      throw new ConflictException("Ce nom d'utilisateur est deja pris");
+    }
+
     const { data: existing } = await this.supabase.client
       .from('manager_accounts')
       .select('id')
@@ -35,6 +53,7 @@ export class AdminService {
     const { data, error } = await this.supabase.client
       .from('manager_accounts')
       .insert({
+        username,
         email: dto.email,
         password_hash: passwordHash,
         display_name: dto.displayName,

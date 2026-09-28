@@ -43,10 +43,11 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
+    const identifier = String(dto.email ?? '').trim();
     const { data: account, error } = await this.supabase.client
       .from('manager_accounts')
-      .select('id, email, password_hash, display_name, role, enabled')
-      .eq('email', dto.email)
+      .select('id, email, username, password_hash, display_name, role, enabled')
+      .eq(identifier.includes('@') ? 'email' : 'username', identifier.includes('@') ? identifier : identifier.toLowerCase())
       .maybeSingle();
 
     if (error || !account) {
@@ -80,6 +81,7 @@ export class AuthService {
       manager: {
         id: account.id,
         email: account.email,
+        username: account.username,
         displayName: account.display_name,
         role: account.role,
       },
