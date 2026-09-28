@@ -73,8 +73,9 @@ export class DepositsService {
 
     // Le serveur est la seule autorite sur le bonus. Arrondi vers le bas :
     // on ne credite jamais plus que le pourcentage annonce.
-    const bonusPercentage = bonus ? Number(bonus.percentage) : 0;
-    const bonusAmount = Math.floor((amount * bonusPercentage) / 100);
+    const computed = this.computeBonus(bonus, amount);
+    const bonusPercentage = computed.percentage;
+    const bonusAmount = computed.bonusAmount;
     const totalCredit = amount + bonusAmount;
 
     const ussdCode = String(config.orange_money_ussd_template)
@@ -93,7 +94,7 @@ export class DepositsService {
           player_id_1xbet: player.id,
           player_name: player.name,
           amount,
-          bonus_campaign_id: bonus ? bonus.id : null,
+          bonus_campaign_id: computed.campaignId,
           bonus_percentage: bonusPercentage,
           bonus_amount: bonusAmount,
           total_credit: totalCredit,
@@ -236,7 +237,7 @@ export class DepositsService {
     const iso = now.toISOString();
     const { data, error } = await this.supabase.client
       .from('bonus_campaigns')
-      .select('id, percentage')
+      .select('id, percentage, min_deposit, max_bonus')
       .eq('is_active', true)
       .lte('starts_at', iso)
       .gt('ends_at', iso)
@@ -246,6 +247,19 @@ export class DepositsService {
       throw new Error(`Erreur lecture bonus: ${error.message}`);
     }
     return data;
+  }
+
+  /** Applique le depot minimum et le bonus maximum de la campagne active. */
+  private computeBonus(bonus: any, amount: number) {
+    const none = { campaignId: null as string | null, percentage: 0, bonusAmount: 0 };
+    if (!bonus) return none;
+    if (amount < Number(bonus.min_deposit ?? 0)) return none;
+    const percentage = Number(bonus.percentage);
+    let bonusAmount = Math.floor((amount * percentage) / 100);
+    if (bonus.max_bonus !== null && bonus.max_bonus !== undefined) {
+      bonusAmount = Math.min(bonusAmount, Math.floor(Number(bonus.max_bonus)));
+    }
+    return { campaignId: String(bonus.id), percentage, bonusAmount };
   }
 
   private generateReference(now: Date): string {

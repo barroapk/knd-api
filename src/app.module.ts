@@ -11,6 +11,7 @@ import { OrangeMoneyPaymentsModule } from './orange-money-payments/orange-money-
 import { MatchingModule } from './matching/matching.module';
 import { DepositsModule } from './deposits/deposits.module';
 import { ManagerModule } from './manager/manager.module';
+import { BonusModule } from './bonus/bonus.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ManagerModule } from './manager/manager.module';
     MatchingModule,
     DepositsModule,
     ManagerModule,
+    BonusModule,
   ],
   controllers: [AppController],
   providers: [AppService],
