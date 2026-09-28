@@ -10,6 +10,7 @@ import { randomInt } from 'crypto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { NafaCashVerificationProvider } from '../player-verification/nafacash-verification.provider';
 import type { CreateDepositDto } from './deposits.types';
+import { DepositLifecycleService } from './deposit-lifecycle.service';
 
 const MIN_DEPOSIT = 100;
 const MAX_DEPOSIT = 500000;
@@ -37,6 +38,7 @@ export class DepositsService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly playerVerification: NafaCashVerificationProvider,
+    private readonly lifecycle: DepositLifecycleService,
   ) {}
 
   async createDeposit(dto: CreateDepositDto) {
@@ -60,6 +62,9 @@ export class DepositsService {
     if (!paymentPhone) {
       throw new BadRequestException('Numero Orange Money invalide');
     }
+
+    // Libere d'abord les numeros dont le depot a expire.
+    await this.lifecycle.sweepSafely();
 
     const player = await this.verifyPlayer(playerId);
     const config = await this.getActivePaymentConfig();
@@ -126,6 +131,7 @@ export class DepositsService {
 
   async getDeposit(id: string) {
     this.assertUuid(id);
+    await this.lifecycle.sweepSafely();
 
     const { data, error } = await this.supabase.client
       .from('deposits')
