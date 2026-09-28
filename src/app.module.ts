@@ -10,6 +10,7 @@ import { DevicesModule } from './devices/devices.module';
 import { OrangeMoneyPaymentsModule } from './orange-money-payments/orange-money-payments.module';
 import { MatchingModule } from './matching/matching.module';
 import { DepositsModule } from './deposits/deposits.module';
+import { ManagerModule } from './manager/manager.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { DepositsModule } from './deposits/deposits.module';
     OrangeMoneyPaymentsModule,
     MatchingModule,
     DepositsModule,
+    ManagerModule,
   ],
   controllers: [AppController],
   providers: [AppService],
