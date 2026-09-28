@@ -184,7 +184,7 @@ export class ManagerService {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    const range = this.periodRange(query.period);
+    const range = this.dateRange(query.date) ?? this.periodRange(query.period);
     const search = this.sanitizeSearch(query.q);
 
     let listQuery = this.supabase.client
@@ -278,6 +278,17 @@ export class ManagerService {
       total,
       totalPages: Math.max(1, Math.ceil(total / limit)),
       items: rows.map((r) => this.toDepositView(r, paymentsById.get(r.matched_payment_id))),
+    };
+  }
+
+  /** Un jour precis (AAAA-MM-JJ). L'heure du Burkina Faso correspond a UTC. */
+  private dateRange(date?: string): { from: string; to: string } | null {
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+    const start = Date.parse(`${date}T00:00:00Z`);
+    if (Number.isNaN(start)) return null;
+    return {
+      from: new Date(start).toISOString(),
+      to: new Date(start + 24 * 60 * 60 * 1000).toISOString(),
     };
   }
 
