@@ -28,8 +28,8 @@ export class ManagerController {
   }
 
   @Get('deposits/history')
-  async history(@Query('limit') limit: string | undefined, @Req() request: any) {
-    return this.managerService.listHistory(request.manager, limit);
+  async history(@Query() query: Record<string, string>, @Req() request: any) {
+    return this.managerService.listHistory(request.manager, query);
   }
 
   @Get('payments/unmatched')

@@ -165,26 +165,65 @@ export class ManagerService {
   }
 
   /**
-   * Historique des depots credites (SUCCESS). Un MANAGER ne voit que ceux
-   * qu'il a traites, un ADMIN voit ceux de tous les managers.
+   * Historique des depots credites (SUCCESS) avec recherche, periode, tri et
+   * pagination cote serveur. Un MANAGER ne voit que ses propres depots, un
+   * ADMIN voit ceux de tous les managers.
+   * Parametres : q, period (today|yesterday|7d|30d|month), sort
+   * (date_desc|date_asc|amount_desc|amount_asc), page, limit.
    */
-  async listHistory(manager: ManagerContext, limitRaw?: string) {
-    const DEFAULT_LIMIT = 50;
-    const MAX_LIMIT = 200;
-    const parsed = parseInt(limitRaw ?? '', 10);
-    const limit = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), MAX_LIMIT) : DEFAULT_LIMIT;
+  async listHistory(manager: ManagerContext, query: Record<string, string> = {}) {
+    const DEFAULT_LIMIT = 20;
+    const MAX_LIMIT = 100;
     const isAdmin = manager.role === 'ADMIN';
+
+    const limitParsed = parseInt(query.limit ?? '', 10);
+    const limit = Number.isFinite(limitParsed) ? Math.min(Math.max(limitParsed, 1), MAX_LIMIT) : DEFAULT_LIMIT;
+    const pageParsed = parseInt(query.page ?? '', 10);
+    const page = Number.isFinite(pageParsed) ? Math.max(pageParsed, 1) : 1;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const range = this.periodRange(query.period);
+    const search = this.sanitizeSearch(query.q);
 
     let listQuery = this.supabase.client
       .from('deposits')
-      .select(DEPOSIT_COLUMNS)
+      .select(DEPOSIT_COLUMNS, { count: 'exact' })
       .eq('status', 'SUCCESS');
     if (!isAdmin) {
       listQuery = listQuery.eq('processed_by_manager_id', manager.id);
     }
-    const { data, error } = await listQuery
-      .order('processed_at', { ascending: false, nullsFirst: false })
-      .limit(limit);
+    if (range) {
+      listQuery = listQuery.gte('processed_at', range.from);
+      if (range.to) {
+        listQuery = listQuery.lt('processed_at', range.to);
+      }
+    }
+    if (search) {
+      listQuery = listQuery.or(
+        `reference.ilike.%${search}%,player_id_1xbet.ilike.%${search}%,player_name.ilike.%${search}%,processed_by.ilike.%${search}%`,
+      );
+    }
+
+    switch (query.sort) {
+      case 'date_asc':
+        listQuery = listQuery.order('processed_at', { ascending: true });
+        break;
+      case 'amount_desc':
+        listQuery = listQuery
+          .order('total_credit', { ascending: false })
+          .order('processed_at', { ascending: false });
+        break;
+      case 'amount_asc':
+        listQuery = listQuery
+          .order('total_credit', { ascending: true })
+          .order('processed_at', { ascending: false });
+        break;
+      default:
+        listQuery = listQuery.order('processed_at', { ascending: false, nullsFirst: false });
+    }
+
+    const { data, error, count } = await listQuery.range(from, to);
 
     if (error) {
       throw new Error(`Erreur lecture historique: ${error.message}`);
@@ -208,7 +247,7 @@ export class ManagerService {
       }
     }
 
-    // Totaux du jour (UTC = heure du Burkina Faso)
+    // Totaux du jour, independants des filtres (UTC = heure du Burkina Faso)
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
 
@@ -228,12 +267,43 @@ export class ManagerService {
 
     const todayList = todayRows ?? [];
     const todayTotal = todayList.reduce((sum, r) => sum + Number(r.total_credit), 0);
+    const total = count ?? rows.length;
 
     return {
       todayCount: todayList.length,
       todayTotal,
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
       items: rows.map((r) => this.toDepositView(r, paymentsById.get(r.matched_payment_id))),
     };
+  }
+
+  private periodRange(period?: string): { from: string; to: string | null } | null {
+    const now = new Date();
+    const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const day = 24 * 60 * 60 * 1000;
+
+    switch (period) {
+      case 'today':
+        return { from: startOfToday.toISOString(), to: null };
+      case 'yesterday':
+        return { from: new Date(startOfToday.getTime() - day).toISOString(), to: startOfToday.toISOString() };
+      case '7d':
+        return { from: new Date(startOfToday.getTime() - 6 * day).toISOString(), to: null };
+      case '30d':
+        return { from: new Date(startOfToday.getTime() - 29 * day).toISOString(), to: null };
+      case 'month':
+        return { from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(), to: null };
+      default:
+        return null;
+    }
+  }
+
+  /** Ne garde que des caracteres sans danger pour le filtre de recherche. */
+  private sanitizeSearch(raw?: string): string {
+    return (raw ?? '').replace(/[^\p{L}\p{N} @._-]/gu, '').trim().slice(0, 50);
   }
 
   /** Paiements recus sans depot (dont les paiements tardifs) : lecture seule. */
