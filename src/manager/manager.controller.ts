@@ -32,6 +32,11 @@ export class ManagerController {
     return this.managerService.listHistory(request.manager, query);
   }
 
+  @Get('activity-signature')
+  async activitySignature(@Req() request: any) {
+    return this.managerService.getActivitySignature(request.manager);
+  }
+
   @Get('payments/unmatched')
   async listUnmatchedPayments() {
     return this.managerService.listUnmatchedPayments();

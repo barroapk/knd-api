@@ -172,6 +172,49 @@ export class ManagerService {
    * Parametres : q, period (today|yesterday|7d|30d|month), sort
    * (date_desc|date_asc|amount_desc|amount_asc), page, limit.
    */
+/**
+   * Petite empreinte pour savoir si quelque chose a change, sans
+   * retelecharger toute la liste. L'app la consulte toutes les 4 secondes.
+   */
+  async getActivitySignature(manager: ManagerContext) {
+    const isAdmin = manager.role === 'ADMIN';
+    let query = this.supabase.client
+      .from('deposits')
+      .select('id, status, updated_at')
+      .in('status', ['PAYMENT_CONFIRMED', 'PROCESSING']);
+    const { data: active, error: activeError } = await query.order('updated_at', { ascending: false }).limit(50);
+    if (activeError) {
+      throw new Error(`Erreur signature: ${activeError.message}`);
+    }
+
+    let successQuery = this.supabase.client
+      .from('deposits')
+      .select('processed_at')
+      .eq('status', 'SUCCESS')
+      .order('processed_at', { ascending: false, nullsFirst: false })
+      .limit(1);
+    if (!isAdmin) {
+      successQuery = successQuery.eq('processed_by_manager_id', manager.id);
+    }
+    const { data: lastSuccess, error: successError } = await successQuery.maybeSingle();
+    if (successError) {
+      throw new Error(`Erreur signature: ${successError.message}`);
+    }
+
+    const { count: unmatchedCount, error: unmatchedError } = await this.supabase.client
+      .from('orange_money_payments')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'UNMATCHED');
+    if (unmatchedError) {
+      throw new Error(`Erreur signature: ${unmatchedError.message}`);
+    }
+
+    const parts = (active ?? []).map((r) => `${r.id}:${r.status}:${r.updated_at}`);
+    parts.push(`success:${lastSuccess?.processed_at ?? ''}`);
+    parts.push(`unmatched:${unmatchedCount ?? 0}`);
+    return { signature: parts.join('|') };
+  }
+
   async listHistory(manager: ManagerContext, query: Record<string, string> = {}) {
     const DEFAULT_LIMIT = 20;
     const MAX_LIMIT = 100;
