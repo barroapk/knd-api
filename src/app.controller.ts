@@ -12,6 +12,11 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get('ping')
+  ping() {
+    return 'ok';
+  }
+
   @Get('test-protected')
   @UseGuards(JwtAuthGuard)
   testProtected() {
