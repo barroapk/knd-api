@@ -164,6 +164,78 @@ export class ManagerService {
     return this.toDepositView(data);
   }
 
+  /**
+   * Historique des depots credites (SUCCESS). Un MANAGER ne voit que ceux
+   * qu'il a traites, un ADMIN voit ceux de tous les managers.
+   */
+  async listHistory(manager: ManagerContext, limitRaw?: string) {
+    const DEFAULT_LIMIT = 50;
+    const MAX_LIMIT = 200;
+    const parsed = parseInt(limitRaw ?? '', 10);
+    const limit = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), MAX_LIMIT) : DEFAULT_LIMIT;
+    const isAdmin = manager.role === 'ADMIN';
+
+    let listQuery = this.supabase.client
+      .from('deposits')
+      .select(DEPOSIT_COLUMNS)
+      .eq('status', 'SUCCESS');
+    if (!isAdmin) {
+      listQuery = listQuery.eq('processed_by_manager_id', manager.id);
+    }
+    const { data, error } = await listQuery
+      .order('processed_at', { ascending: false, nullsFirst: false })
+      .limit(limit);
+
+    if (error) {
+      throw new Error(`Erreur lecture historique: ${error.message}`);
+    }
+
+    const rows = data ?? [];
+    const paymentIds = rows.map((r) => r.matched_payment_id).filter((id): id is string => !!id);
+    const paymentsById = new Map<string, any>();
+
+    if (paymentIds.length > 0) {
+      const { data: payments, error: paymentsError } = await this.supabase.client
+        .from('orange_money_payments')
+        .select('id, transaction_id, amount, sender_phone, sender_name, received_at')
+        .in('id', paymentIds);
+
+      if (paymentsError) {
+        throw new Error(`Erreur lecture paiements: ${paymentsError.message}`);
+      }
+      for (const p of payments ?? []) {
+        paymentsById.set(p.id, p);
+      }
+    }
+
+    // Totaux du jour (UTC = heure du Burkina Faso)
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+
+    let todayQuery = this.supabase.client
+      .from('deposits')
+      .select('total_credit')
+      .eq('status', 'SUCCESS')
+      .gte('processed_at', startOfDay.toISOString());
+    if (!isAdmin) {
+      todayQuery = todayQuery.eq('processed_by_manager_id', manager.id);
+    }
+    const { data: todayRows, error: todayError } = await todayQuery;
+
+    if (todayError) {
+      throw new Error(`Erreur totaux du jour: ${todayError.message}`);
+    }
+
+    const todayList = todayRows ?? [];
+    const todayTotal = todayList.reduce((sum, r) => sum + Number(r.total_credit), 0);
+
+    return {
+      todayCount: todayList.length,
+      todayTotal,
+      items: rows.map((r) => this.toDepositView(r, paymentsById.get(r.matched_payment_id))),
+    };
+  }
+
   /** Paiements recus sans depot (dont les paiements tardifs) : lecture seule. */
   async listUnmatchedPayments() {
     const { data, error } = await this.supabase.client

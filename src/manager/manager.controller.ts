@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ManagerService } from './manager.service';
 
@@ -25,6 +25,11 @@ export class ManagerController {
   @Post('deposits/:id/release')
   async release(@Param('id') id: string, @Req() request: any) {
     return this.managerService.release(id, request.manager);
+  }
+
+  @Get('deposits/history')
+  async history(@Query('limit') limit: string | undefined, @Req() request: any) {
+    return this.managerService.listHistory(request.manager, limit);
   }
 
   @Get('payments/unmatched')
