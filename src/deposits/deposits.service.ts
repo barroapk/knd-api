@@ -12,7 +12,7 @@ import { NafaCashVerificationProvider } from '../player-verification/nafacash-ve
 import type { CreateDepositDto } from './deposits.types';
 import { DepositLifecycleService } from './deposit-lifecycle.service';
 
-const MIN_DEPOSIT = 100;
+const MIN_DEPOSIT = 200;
 const MAX_DEPOSIT = 500000;
 const PENDING_WINDOW_MINUTES = 3;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
