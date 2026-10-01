@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminOnlyGuard } from '../auth/admin-only.guard';
 import { BonusService } from './bonus.service';
-import type { CreateCampaignDto } from './bonus.types';
+import type { CreateCampaignDto, UpdateCampaignDto } from './bonus.types';
 
 @Controller('admin/bonus')
 @UseGuards(JwtAuthGuard, AdminOnlyGuard)
@@ -17,6 +17,11 @@ export class BonusController {
   @Post()
   async create(@Body() dto: CreateCampaignDto) {
     return this.bonusService.create(dto);
+  }
+
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() dto: UpdateCampaignDto) {
+    return this.bonusService.update(id, dto);
   }
 
   @Post(':id/activate')
