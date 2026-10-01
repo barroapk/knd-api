@@ -105,7 +105,7 @@ export class MatchingService {
       .update({ status: 'PAYMENT_CONFIRMED' })
       .eq('id', depositId)
       .in('status', NORMAL_STATUSES)
-      .select('id')
+      .select('id, player_id_1xbet, amount')
       .maybeSingle();
 
     if (depositError) {
@@ -116,6 +116,12 @@ export class MatchingService {
       this.logger.warn(`Course detectee sur depot ${depositId} - traite comme ambigu`);
       return this.applyAmbiguous(paymentId);
     }
+
+    // Compte commercial : execute uniquement ici, jamais rejouable, car la
+    // clause .in(status, NORMAL_STATUSES) ci-dessus garantit que ce code
+    // n'est atteint qu'une seule fois par depot (un match rejoue trouverait
+    // le depot deja hors NORMAL_STATUSES et sortirait plus haut).
+    await this.recordPlayerDeposit(updatedDeposit.player_id_1xbet, Number(updatedDeposit.amount));
 
     const { error: paymentUpdateError } = await this.supabase.client
       .from('orange_money_payments')
@@ -142,6 +148,37 @@ export class MatchingService {
     }
 
     return { result: 'UNIQUE_MATCH', matchedDepositId: depositId, lateMatchReason: null };
+  }
+
+  /**
+   * Met a jour le compteur commercial du joueur apres un depot reellement
+   * CONFIRME (jamais a la creation). first_deposit_at n'est pose que s'il
+   * etait encore vide, pour ne jamais ecraser une vraie premiere date.
+   */
+  private async recordPlayerDeposit(playerId: string, amount: number) {
+    const { data: player, error: readError } = await this.supabase.client
+      .from('players_verified')
+      .select('deposit_count, total_deposited, first_deposit_at')
+      .eq('player_id_1xbet', playerId)
+      .maybeSingle();
+
+    if (readError || !player) {
+      this.logger.warn(`Compteur joueur non mis a jour (lecture): ${readError?.message ?? 'joueur introuvable'}`);
+      return;
+    }
+
+    const { error: updateError } = await this.supabase.client
+      .from('players_verified')
+      .update({
+        deposit_count: Number(player.deposit_count ?? 0) + 1,
+        total_deposited: Number(player.total_deposited ?? 0) + amount,
+        first_deposit_at: player.first_deposit_at ?? new Date().toISOString(),
+      })
+      .eq('player_id_1xbet', playerId);
+
+    if (updateError) {
+      this.logger.warn(`Compteur joueur non mis a jour (ecriture): ${updateError.message}`);
+    }
   }
 
   private async applyLateMatch(

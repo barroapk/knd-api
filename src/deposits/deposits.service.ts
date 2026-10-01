@@ -73,7 +73,7 @@ export class DepositsService {
 
     // Le serveur est la seule autorite sur le bonus. Arrondi vers le bas :
     // on ne credite jamais plus que le pourcentage annonce.
-    const computed = this.computeBonus(bonus, amount);
+    const computed = this.computeBonus(bonus, amount, player.isFirstDeposit);
     const bonusPercentage = computed.percentage;
     const bonusAmount = computed.bonusAmount;
     const totalCredit = amount + bonusAmount;
@@ -193,6 +193,14 @@ export class DepositsService {
       throw new NotFoundException('Compte 1xBet introuvable');
     }
 
+    // Lu avant l'upsert : first_deposit_at reste null tant qu'aucun depot
+    // de ce joueur n'a ete CONFIRME (pose par le matching, pas ici).
+    const { data: existing } = await this.supabase.client
+      .from('players_verified')
+      .select('first_deposit_at')
+      .eq('player_id_1xbet', playerId)
+      .maybeSingle();
+
     const { error } = await this.supabase.client
       .from('players_verified')
       .upsert(
@@ -207,7 +215,11 @@ export class DepositsService {
       this.logger.warn(`Cache joueur non enregistre: ${error.message}`);
     }
 
-    return { id: playerId, name: result.playerName as string };
+    return {
+      id: playerId,
+      name: result.playerName as string,
+      isFirstDeposit: !existing?.first_deposit_at,
+    };
   }
 
   private async getActivePaymentConfigOrNull() {
@@ -237,7 +249,7 @@ export class DepositsService {
     const iso = now.toISOString();
     const { data, error } = await this.supabase.client
       .from('bonus_campaigns')
-      .select('id, percentage, min_deposit, max_bonus')
+      .select('id, percentage, returning_percentage, min_deposit, max_bonus')
       .eq('is_active', true)
       .lte('starts_at', iso)
       .gt('ends_at', iso)
@@ -249,12 +261,26 @@ export class DepositsService {
     return data;
   }
 
-  /** Applique le depot minimum et le bonus maximum de la campagne active. */
-  private computeBonus(bonus: any, amount: number) {
+  /**
+   * Applique le depot minimum et le bonus maximum de la campagne active.
+   * isFirstDeposit determine si le pourcentage "premier depot" ou
+   * "returning_percentage" (dépôts suivants) s'applique. Si la campagne
+   * n'a pas de returning_percentage configure, les depots suivants n'ont
+   * aucun bonus (comportement explicite, pas un pourcentage devine).
+   */
+  private computeBonus(bonus: any, amount: number, isFirstDeposit: boolean) {
     const none = { campaignId: null as string | null, percentage: 0, bonusAmount: 0 };
     if (!bonus) return none;
     if (amount < Number(bonus.min_deposit ?? 0)) return none;
-    const percentage = Number(bonus.percentage);
+
+    const percentage = isFirstDeposit
+      ? Number(bonus.percentage)
+      : bonus.returning_percentage !== null && bonus.returning_percentage !== undefined
+        ? Number(bonus.returning_percentage)
+        : 0;
+
+    if (percentage <= 0) return none;
+
     let bonusAmount = Math.floor((amount * percentage) / 100);
     if (bonus.max_bonus !== null && bonus.max_bonus !== undefined) {
       bonusAmount = Math.min(bonusAmount, Math.floor(Number(bonus.max_bonus)));
