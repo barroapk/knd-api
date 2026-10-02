@@ -1,10 +1,15 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { DepositsService } from './deposits.service';
-import type { CreateDepositDto } from './deposits.types';
+import type { CreateDepositDto, PreviewDepositDto } from './deposits.types';
 
 @Controller('deposits')
 export class DepositsController {
   constructor(private readonly depositsService: DepositsService) {}
+
+  @Post('preview')
+  async preview(@Body() dto: PreviewDepositDto) {
+    return this.depositsService.previewDeposit(dto);
+  }
 
   @Post()
   async create(@Body() dto: CreateDepositDto) {

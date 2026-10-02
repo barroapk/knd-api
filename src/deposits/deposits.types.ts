@@ -3,3 +3,8 @@ export interface CreateDepositDto {
   amount: number;
   paymentPhone: string;
 }
+
+export interface PreviewDepositDto {
+  playerId: string;
+  amount: number;
+}
