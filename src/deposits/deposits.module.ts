@@ -8,5 +8,6 @@ import { PlayerVerificationModule } from '../player-verification/player-verifica
   imports: [PlayerVerificationModule],
   controllers: [DepositsController],
   providers: [DepositsService, DepositLifecycleService],
+  exports: [DepositLifecycleService],
 })
 export class DepositsModule {}
