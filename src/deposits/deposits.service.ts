@@ -21,7 +21,7 @@ const CANCELLABLE_STATUSES = ['PAYMENT_PENDING', 'PAYMENT_LATE'];
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const DEPOSIT_COLUMNS =
-  'id, reference, player_id_1xbet, player_name, amount, bonus_percentage, bonus_amount, total_credit, status, declared_payment_phone, ussd_code_used, merchant_name_used, expires_at, created_at';
+  'id, reference, player_id_1xbet, player_name, amount, bonus_percentage, bonus_amount, total_credit, status, declared_payment_phone, ussd_code_used, merchant_name_used, expires_at, payment_started_at, payment_alerted_at, created_at';
 
 /** 8 chiffres (07802610) ou 11 chiffres avec 226 -> format 226XXXXXXXX */
 export function normalizePhone(raw: string): string | null {
@@ -102,6 +102,7 @@ export class DepositsService {
           ussd_code_used: ussdCode,
           merchant_name_used: config.orange_money_merchant_name,
           expires_at: expiresAt.toISOString(),
+          payment_started_at: now.toISOString(),
           status: 'PAYMENT_PENDING',
         })
         .select(DEPOSIT_COLUMNS)
@@ -331,6 +332,8 @@ export class DepositsService {
       merchantName: row.merchant_name_used,
       supportWhatsapp,
       expiresAt: row.expires_at,
+      paymentStartedAt: row.payment_started_at,
+      paymentAlertedAt: row.payment_alerted_at,
       createdAt: row.created_at,
     };
   }

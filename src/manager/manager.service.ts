@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import { DepositLifecycleService } from '../deposits/deposit-lifecycle.service';
 
 export interface ManagerContext {
   id: string;
@@ -14,17 +15,26 @@ export interface ManagerContext {
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const WORKLIST_STATUSES = ['PAYMENT_CONFIRMED', 'PROCESSING'];
+const WORKLIST_STATUSES = [
+  'PAYMENT_PENDING',
+  'PAYMENT_LATE',
+  'PAYMENT_EXPIRED',
+  'PAYMENT_CONFIRMED',
+  'PROCESSING',
+];
 const UNMATCHED_LIMIT = 50;
 
 const DEPOSIT_COLUMNS =
-  'id, reference, player_id_1xbet, player_name, amount, bonus_percentage, bonus_amount, total_credit, status, declared_payment_phone, processed_by, processed_by_manager_id, processing_started_at, processed_at, matched_payment_id, created_at';
+  'id, reference, player_id_1xbet, player_name, amount, bonus_percentage, bonus_amount, total_credit, status, declared_payment_phone, processed_by, processed_by_manager_id, processing_started_at, processed_at, matched_payment_id, expires_at, payment_started_at, payment_alerted_at, created_at';
 
 @Injectable()
 export class ManagerService {
   private readonly logger = new Logger(ManagerService.name);
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly depositLifecycle: DepositLifecycleService,
+  ) {}
 
   /** Depots a traiter : payes (PAYMENT_CONFIRMED) ou deja pris en charge (PROCESSING). */
   async listDeposits() {
@@ -177,11 +187,19 @@ export class ManagerService {
    * retelecharger toute la liste. L'app la consulte toutes les 4 secondes.
    */
   async getActivitySignature(manager: ManagerContext) {
+    await this.depositLifecycle.sweepSafely();
+
     const isAdmin = manager.role === 'ADMIN';
     let query = this.supabase.client
       .from('deposits')
       .select('id, status, updated_at')
-      .in('status', ['PAYMENT_CONFIRMED', 'PROCESSING']);
+      .in('status', [
+        'PAYMENT_PENDING',
+        'PAYMENT_LATE',
+        'PAYMENT_EXPIRED',
+        'PAYMENT_CONFIRMED',
+        'PROCESSING',
+      ]);
     const { data: active, error: activeError } = await query.order('updated_at', { ascending: false }).limit(50);
     if (activeError) {
       throw new Error(`Erreur signature: ${activeError.message}`);
@@ -209,7 +227,9 @@ export class ManagerService {
       throw new Error(`Erreur signature: ${unmatchedError.message}`);
     }
 
-    const parts = (active ?? []).map((r) => `${r.id}:${r.status}:${r.updated_at}`);
+    const parts = (active ?? []).map(
+      (r) => `${r.id}:${r.status}:${r.updated_at}`,
+    );
     parts.push(`success:${lastSuccess?.processed_at ?? ''}`);
     parts.push(`unmatched:${unmatchedCount ?? 0}`);
     return { signature: parts.join('|') };
@@ -482,6 +502,15 @@ export class ManagerService {
       processedByManagerId: row.processed_by_manager_id,
       processingStartedAt: row.processing_started_at,
       processedAt: row.processed_at,
+      expiresAt: row.expires_at,
+      paymentStartedAt: row.payment_started_at,
+      paymentAlertedAt: row.payment_alerted_at,
+      paymentAlert: row.payment_alerted_at
+        ? {
+            type: 'PAYMENT_NOT_DETECTED',
+            message: 'Paiement non détecté',
+          }
+        : null,
       createdAt: row.created_at,
       payment: payment
         ? {
