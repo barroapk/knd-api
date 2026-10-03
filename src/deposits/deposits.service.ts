@@ -9,7 +9,11 @@ import {
 import { randomInt } from 'crypto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { NafaCashVerificationProvider } from '../player-verification/nafacash-verification.provider';
-import type { CreateDepositDto, PreviewDepositDto } from './deposits.types';
+import type {
+  BonusInfoDto,
+  CreateDepositDto,
+  PreviewDepositDto,
+} from './deposits.types';
 import { DepositLifecycleService } from './deposit-lifecycle.service';
 
 const MIN_DEPOSIT = 200;
@@ -50,6 +54,52 @@ export class DepositsService {
     private readonly playerVerification: NafaCashVerificationProvider,
     private readonly lifecycle: DepositLifecycleService,
   ) {}
+
+  async bonusInfo(dto: BonusInfoDto) {
+    const playerId = String(dto?.playerId ?? '').trim();
+    const amount = dto?.amount;
+
+    if (!/^\d{5,15}$/.test(playerId)) {
+      throw new BadRequestException('Identifiant 1xBet invalide');
+    }
+
+    if (
+      typeof amount !== 'number' ||
+      !Number.isInteger(amount) ||
+      amount < MIN_DEPOSIT ||
+      amount > MAX_DEPOSIT
+    ) {
+      throw new BadRequestException(
+        `Montant invalide (entre ${MIN_DEPOSIT} et ${MAX_DEPOSIT} FCFA, sans decimales)`,
+      );
+    }
+
+    const player = await this.verifyPlayer(playerId);
+    const now = new Date();
+    const bonus = await this.getActiveBonus(now);
+
+    const computed = this.computeBonus(
+      bonus,
+      amount,
+      player.isFirstDeposit,
+    );
+
+    return {
+      valid: true,
+      playerId: player.id,
+      playerName: player.name,
+      amount,
+      isFirstDeposit: player.isFirstDeposit,
+      bonusPercentage: computed.percentage,
+      bonusAmount: computed.bonusAmount,
+      totalCredit: amount + computed.bonusAmount,
+      minDeposit: bonus ? Number(bonus.min_deposit ?? 0) : null,
+      maxBonus:
+        bonus?.max_bonus === null || bonus?.max_bonus === undefined
+          ? null
+          : Number(bonus.max_bonus),
+    };
+  }
 
   async previewDeposit(dto: PreviewDepositDto) {
     const playerId = String(dto?.playerId ?? '').trim();

@@ -8,3 +8,8 @@ export interface PreviewDepositDto {
   playerId: string;
   amount: number;
 }
+
+export interface BonusInfoDto {
+  playerId: string;
+  amount: number;
+}

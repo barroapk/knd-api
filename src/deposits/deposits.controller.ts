@@ -1,10 +1,27 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { DepositsService } from './deposits.service';
-import type { CreateDepositDto, PreviewDepositDto } from './deposits.types';
+import type {
+  BonusInfoDto,
+  CreateDepositDto,
+  PreviewDepositDto,
+} from './deposits.types';
 
 @Controller('deposits')
 export class DepositsController {
   constructor(private readonly depositsService: DepositsService) {}
+
+  @Get('bonus-info')
+  async bonusInfo(
+    @Query('playerId') playerId: string,
+    @Query('amount') amount: string,
+  ) {
+    const dto: BonusInfoDto = {
+      playerId,
+      amount: Number(amount),
+    };
+
+    return this.depositsService.bonusInfo(dto);
+  }
 
   @Post('preview')
   async preview(@Body() dto: PreviewDepositDto) {
