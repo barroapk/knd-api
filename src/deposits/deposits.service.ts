@@ -155,11 +155,19 @@ export class DepositsService {
 
       if (error?.code === POSTGRES_UNIQUE_VIOLATION) {
         const message = error.message ?? '';
+
+        if (message.includes('idx_deposits_one_active_per_phone_amount')) {
+          throw new ConflictException(
+            "Ce numero Orange Money a deja une operation en cours pour ce montant. Attendez son traitement ou annulez-la si aucun paiement n'a encore ete effectue.",
+          );
+        }
+
         if (message.includes('idx_deposits_one_active_per_phone')) {
           throw new ConflictException(
             "Ce numero Orange Money a deja une operation en cours. Attendez son traitement ou annulez-la si aucun paiement n'a encore ete effectue.",
           );
         }
+
         if (message.includes('reference')) {
           continue; // collision de reference, on retente avec une autre
         }
