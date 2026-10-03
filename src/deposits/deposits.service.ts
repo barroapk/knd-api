@@ -26,8 +26,18 @@ const DEPOSIT_COLUMNS =
 /** 8 chiffres (07802610) ou 11 chiffres avec 226 -> format 226XXXXXXXX */
 export function normalizePhone(raw: string): string | null {
   const digits = String(raw ?? '').replace(/\D/g, '');
-  if (digits.length === 8) return `226${digits}`;
-  if (digits.length === 11 && digits.startsWith('226')) return digits;
+
+  if (digits.length === 8) {
+    if (!/^\d[4567]\d{6}$/.test(digits)) return null;
+    return `226${digits}`;
+  }
+
+  if (digits.length === 11 && digits.startsWith('226')) {
+    const local = digits.slice(3);
+    if (!/^\d[4567]\d{6}$/.test(local)) return null;
+    return digits;
+  }
+
   return null;
 }
 
